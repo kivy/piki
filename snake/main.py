@@ -1,5 +1,7 @@
+from random import randint, random
 from kivy.app import App
 from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.widget import Widget
 from kivy.properties import NumericProperty, StringProperty, ListProperty
 from kivy.clock import Clock
 from kivy.lang import Builder
@@ -16,53 +18,110 @@ Builder.load_string('''
 <Run>:
     canvas.before:
         Color:
-            hsv: .8, 1, .5
+            hsv: .8, .5, .2, 
         Rectangle:
             size: self.size
 
 <Player>:
+    canvas:
         Color:
-            hsv: .2, 1, 1
+            hsv: root.color, 1, 1
         Line:
             points: root.line
         Ellipse:
-            size: root.circle * 2, root.circle * 2
-            pos: root.pos[0] - root.circle, root.pos[1] - root.circle
+            size: root.radius * 2, root.radius * 2
+            pos: root.pos[0] - root.radius, root.pos[1] - root.radius
 
+    Label:
+        text: 'P{} {}'.format(root.index + 1, root.score)
+        font_size: 30
+        size_hint: None, None
+        text_size: 300, None
+        y: 820
+        x: 100 + root.index * 300
+
+<Bonus>:
+    canvas:
+        Color:
+            rgb: 1, 1, 1
+        Rectangle:
+            source: root.source
+            size: root.radius * 2, root.radius * 2
+            pos: root.pos[0] - root.radius, root.pos[1] - root.radius
+
+<BonusPlus>:
+    source: 'plus.png'
+<BonusFast>:
+    source: 'car.png'
+<BonusSlow>:
+    source: 'turtle.png'
+<BonusCherry>:
+    source: 'cherry.png'
 ''')
 
 
 class Player(Widget):
+    index = NumericProperty(0)
     dir = NumericProperty(0)
     line = ListProperty([])
-    circle = NumericProperty(12)
+    radius = NumericProperty(12)
+    color = NumericProperty(0)
+    speed = NumericProperty(300.)
+    sensitivity = NumericProperty(250);
+    tail_size = NumericProperty(50)
+    score = NumericProperty(0)
 
     def update(self, dt, press):
-        sensitivity = 500. * dt
-        speed = 300. * dt
-
-        self.dir += sensitivity if press else -sensitivity
-
-        v = Vector(speed, 0).rotate(self.dir)
+        self.dir += self.sensitivity * (dt if press else -dt)
+        v = Vector(self.speed * dt, 0).rotate(self.dir)
         x, y = Vector(*self.pos) + v
-        x %= self.width
-        y %= self.height
-        self.pos = x, y
-        self.line = (self.p1_line + [x, y])[-100:]
+        xx = x % self.width
+        yy = y % self.height
+        if abs(xx - x) > 500 or abs(yy - y) > 500:
+            self.line = [xx, yy]
+        self.pos = xx, yy
+        self.line = (self.line + [xx, yy])[-self.tail_size:]
+        #self.score += int(self.speed * dt)
+
+
+class Bonus(Widget):
+    radius = NumericProperty(10)
+    source = StringProperty()
+
+    def collide_player(self, player):
+        return Vector(*player.pos).distance(Vector(*self.pos)) < player.radius + self.radius
+
+    def use(self, player):
+        pass
+
+class BonusPlus(Bonus):
+    def use(self, player):
+        player.radius += 5
+
+class BonusFast(Bonus):
+    def use(self, player):
+        player.sensitivity += 50
+
+class BonusSlow(Bonus):
+    def use(self, player):
+        player.sensitivity = max(50, player.sensitivity - 50)
+
+class BonusCherry(Bonus):
+    def use(self, player):
+        player.score += 500
 
 class Run(FloatLayout):
-    p2_dir = NumericProperty(0)
-    p1_pos = ListProperty([300, 500])
-    p2_pos = ListProperty([300, 500])
-    p2_line = ListProperty([])
 
     def __init__(self, **kwargs):
        super(Run, self).__init__(**kwargs) 
+       self.bonus = []
        Clock.schedule_interval(self.read_gpio, 0)
-       self.player1 = Player()
+       Clock.schedule_interval(self.generate_bonus, 1.)
+       self.player1 = Player(color=.2, index=0)
        self.add_widget(self.player1)
-       self.player2 = Player()
+       self.player2 = Player(color=.5, index=1)
        self.add_widget(self.player2)
+       self.players = [self.player1, self.player2]
 
     def read_gpio(self, dt):
         p1 = RPIO.input(PIN_P1)
@@ -71,7 +130,24 @@ class Run(FloatLayout):
         self.player1.update(dt, p1)
         self.player2.update(dt, p2)
 
-
+        for bonus in self.bonus[:]:
+            for player in self.players:
+                if bonus.collide_player(player):
+                    bonus.use(player)
+                    self.bonus.remove(bonus)
+                    self.remove_widget(bonus)
+                    break
+                   
+    def generate_bonus(self, dt):
+        if len(self.bonus) > 10:
+            return
+        cls = [BonusPlus, BonusFast, BonusSlow, BonusCherry]
+        index = randint(0, len(cls) - 1)
+        x = self.width * random()
+        y = self.height * random()
+        bonus = cls[index](pos=(x, y))
+        self.bonus.append(bonus)
+        self.add_widget(bonus)
 
 
 class RunGame(App):
