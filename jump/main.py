@@ -6,7 +6,7 @@ from kivy.factory import Factory as F
 from kivy.properties import *
 from kivy.animation import Animation
 from kivy.core.window import Window
-
+import RPIO
 
 
 PIN_P1 = 17
@@ -25,8 +25,17 @@ JUMP_KV = '''
     canvas:
         Color:
             rgb: (1,0,0) if self.state == "down" else (0,0,0)
+        PushMatrix
+        Translate:
+            xy: self.center
+        Rotate:
+            axis: 0, 0, 1
+            angle: self.rotation
+        Translate:
+            xy: -self.center_x + self.x, -self.center_y + self.y
         Rectangle:
             size: self.size
+        PopMatrix
 
 <Hurdle>:
     height: 60
@@ -67,10 +76,10 @@ JUMP_KV = '''
 BoxLayout:
     orientation: "vertical"
     Jump:
-        player_id: 1
+        player_id: 0
         bg_color: .8,.3,.3
     Jump
-        player_id: 2
+        player_id: 1
         bg_color: .3,.3,.8
 
 '''
@@ -79,14 +88,14 @@ class Jump(F.RelativeLayout):
     player_id = ObjectProperty(0)
     player = ObjectProperty(None)
     hurdles = ObjectProperty(None)
-    speed = NumericProperty(10)
+    speed = NumericProperty(600)
     bg_color = ListProperty([1,1,1])
 
     def __init__(self, **kwargs):
         self._pin_state = False
         Clock.schedule_interval(self.read_input, 0)
-        Clock.schedule_interval(self.update, 1./60.)
-        Clock.schedule_interval(self.new_hurdle, 0.6)
+        Clock.schedule_interval(self.update, 1./30.)
+        Clock.schedule_interval(self.new_hurdle, 1.)
         super(Jump, self).__init__(**kwargs)
 
     def read_input(self, *args):
@@ -95,9 +104,9 @@ class Jump(F.RelativeLayout):
             self.player.jump()
         self._pin_state = pin
 
-    def update(self, *args):
+    def update(self, dt):
         for hurdle in self.hurdles.children[:]:
-            hurdle.x -= self.speed
+            hurdle.x -= self.speed * dt
             if hurdle.collide_widget(self.player):
                 self.player.fall()
             if hurdle.x < -80:
@@ -116,10 +125,11 @@ class Hurdle(F.Widget):
     pass
 
 
-class Player(F.RelativeLayout):
+class Player(F.Widget):
     jump_anim = ObjectProperty(None)
     state = StringProperty("running")
     score = NumericProperty(0)
+    rotation = NumericProperty(0)
 
     def jump(self):
         if self.state != "running":
@@ -129,8 +139,8 @@ class Player(F.RelativeLayout):
         anim = Animation(y=200, t='out_cubic', d=0.2)
         anim += Animation(y=0, t='out_bounce', d=0.3)
         anim2 = Animation(rotation=-360, d=0.4)
-        anim2.bind(on_complete=self.finish_jump)
         anim = anim & anim2
+        anim.bind(on_complete=self.finish_jump)
         self.jump_anim = anim.start(self)
 
     def finish_jump(self, *args):
