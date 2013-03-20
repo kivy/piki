@@ -31,6 +31,21 @@ Builder.load_string('''
         Ellipse:
             size: root.radius * 2, root.radius * 2
             pos: root.pos[0] - root.radius, root.pos[1] - root.radius
+        Color:
+            rgba: 1, 1, 1, .5
+        PushMatrix
+        Translate:
+            xy: root.pos
+        Rotate:
+            axis: 0, 0, 1
+            angle: root.dir - 90
+        Ellipse:
+            pos: -self.radius, self.radius - self.radius / 2.
+            size: self.radius / 2., self.radius / 2.
+        Ellipse:
+            pos: self.radius - self.radius / 2., self.radius - self.radius / 2.
+            size: self.radius / 2., self.radius / 2.
+        PopMatrix
 
     Label:
         text: 'P{} {}'.format(root.index + 1, root.score)

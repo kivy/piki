@@ -20,9 +20,9 @@ PINS = [PIN_P1, PIN_P2]
 JUMP_KV = '''
 
 <Player>:
-    size: 20,100
+    size: map(lambda x: x/2., [144, 100])
     size_hint: None, None
-    canvas:
+    canvas.before:
         Color:
             rgb: (1,0,0) if self.state == "down" else (0,0,0)
         PushMatrix
@@ -33,9 +33,14 @@ JUMP_KV = '''
             angle: self.rotation
         Translate:
             xy: -self.center_x + self.x, -self.center_y + self.y
-        Rectangle:
-            size: self.size
+
+    canvas.after:
         PopMatrix
+
+    Image:
+        size: root.size
+        source: 'cat.gif'
+        anim_delay: 1 / 20. if root.state == 'running' else 2.
 
 <Hurdle>:
     height: 60
@@ -90,12 +95,15 @@ class Jump(F.RelativeLayout):
     hurdles = ObjectProperty(None)
     speed = NumericProperty(600)
     bg_color = ListProperty([1,1,1])
+    gametime = NumericProperty(0)
+    hurdle_size = NumericProperty(0)
 
     def __init__(self, **kwargs):
         self._pin_state = False
         Clock.schedule_interval(self.read_input, 0)
         Clock.schedule_interval(self.update, 1./30.)
         Clock.schedule_interval(self.new_hurdle, 1.)
+        Clock.schedule_interval(self.increase_hurdle, 5.)
         super(Jump, self).__init__(**kwargs)
 
     def read_input(self, *args):
@@ -107,16 +115,20 @@ class Jump(F.RelativeLayout):
     def on_touch_down(self, touch):
         self.player.jump()
 
+    def increase_hurdle(self, dt):
+        self.hurdle_size = min(100, self.hurdle_size + 10.)
+
     def update(self, dt):
+        self.gametime += dt
         cx = self.player.center_x
         for hurdle in self.hurdles.children[:]:
-            hurdle.x -= self.speed * dt
+            hurdle.x -= self.speed * dt + (self.gametime / 100.) * dt
             if hurdle.x < -80:
                 self.hurdles.remove_widget(hurdle)
             elif hurdle.x < cx - 50:
-                return
+                continue
             elif hurdle.x > cx + 50:
-                return
+                continue
             elif hurdle.collide_widget(self.player):
                 self.player.fall()
 
@@ -124,9 +136,9 @@ class Jump(F.RelativeLayout):
         if self.player.state == "down":
             return
         x = self.width + int(random()*200) + 50
-        w = 20
+        w = max(20., (self.hurdle_size / 2.) * random())
         if random() < 0.2:
-            w = 40
+            w += self.hurdle_size / 2.
         self.hurdles.add_widget(Hurdle(x=x, width=w))
 
 class Hurdle(F.Widget):
@@ -144,10 +156,8 @@ class Player(F.Widget):
             return
         self.state = "jumping"
         self.rotation = 0
-        anim = Animation(y=200, t='out_cubic', d=0.2)
-        anim += Animation(y=0, t='out_bounce', d=0.3)
-        anim2 = Animation(rotation=-360, d=0.4)
-        anim = anim & anim2
+        anim = Animation(y=100, t='out_cubic', d=0.2)
+        anim += Animation(y=0, t='in_cubic', d=0.3)
         anim.bind(on_complete=self.finish_jump)
         self.jump_anim = anim.start(self)
 
@@ -161,7 +171,7 @@ class Player(F.Widget):
         if self.state == "jumping" and self.jump_anim:
             self.jump_anim.cancel(self)
         self.state = "down"
-        anim = Animation(y=0, rotation=-270, d=0.5)
+        anim = Animation(y=0, rotation=180, d=0.1)
         anim.start(self)
         Clock.schedule_once(self.get_back_up, 3.0)
 
