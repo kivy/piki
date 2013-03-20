@@ -104,13 +104,21 @@ class Jump(F.RelativeLayout):
             self.player.jump()
         self._pin_state = pin
 
+    def on_touch_down(self, touch):
+        self.player.jump()
+
     def update(self, dt):
+        cx = self.player.center_x
         for hurdle in self.hurdles.children[:]:
             hurdle.x -= self.speed * dt
-            if hurdle.collide_widget(self.player):
-                self.player.fall()
             if hurdle.x < -80:
                 self.hurdles.remove_widget(hurdle)
+            elif hurdle.x < cx - 50:
+                return
+            elif hurdle.x > cx + 50:
+                return
+            elif hurdle.collide_widget(self.player):
+                self.player.fall()
 
     def new_hurdle(self, *args):
         if self.player.state == "down":
